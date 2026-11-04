@@ -1,0 +1,25 @@
+services:
+  synology-calendar-sync:
+    image: ghcr.io/palocay/synology-calendar-sync:latest
+    container_name: synology-calendar-sync
+    environment:
+      TZ: Europe/Berlin
+      DAV_USERNAME: ${DAV_USERNAME}
+      DAV_PASSWORD: ${DAV_PASSWORD}
+      CALDAV_URL: ${CALDAV_URL}
+      DRY_RUN: "true"                    # test first, then set to "false"
+      SCHEDULE_TIME: "04:00"             # first run of the day for all jobs
+      SCHEDULE_INTERVAL: "4h"            # e.g. 4h, 90m, 24h (= once a day)
+      DELETE_STALE_EVENTS: "true"
+      MAX_DELETE_PERCENT: "50"           # deletion protection
+
+      # Birthdays from Synology Contacts (remove CARDDAV_URL to disable)
+      CARDDAV_URL: ${CARDDAV_URL}
+      BIRTHDAY_CALENDAR: "Birthdays"
+      BIRTHDAY_REMINDER: "1d 09:00"      # e.g. "1d 09:00" = day before at 09:00
+
+      # ICS subscriptions (number them 1, 2, 3, ...)
+      ICS_1_URL: "https://example.com/calendar.ics"
+      ICS_1_CALENDAR: "Waste collection"
+      ICS_1_INTERVAL: "24h"
+    restart: unless-stopped

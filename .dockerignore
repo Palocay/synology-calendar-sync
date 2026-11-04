@@ -1,0 +1,10 @@
+.git
+.github
+.env
+tests
+__pycache__
+.pytest_cache
+*.md
+pytest.ini
+requirements-dev.txt
+docker-compose*.yml
