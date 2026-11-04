@@ -1,4 +1,4 @@
-name: Test & Docker Image
+name: Test, Image & Release
 
 on:
   push:
@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   test:
@@ -23,11 +22,25 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: pytest -v
 
+      # For version tags: make sure CHANGELOG.md has a section for this version,
+      # before anything is built or published.
+      - name: Check changelog entry
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! grep -q "^## ${VERSION}\$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section '## ${VERSION}'"
+            exit 1
+          fi
+
   build:
     needs: test
     # Pull requests (e.g. from Dependabot) are only tested, not published.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -69,3 +82,37 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    needs: build
+    # Only for version tags like v1.2.3, after the image has been published.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="## ${VERSION}" '
+            $0 == ver { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          {
+            echo
+            echo "### Docker image"
+            echo
+            echo '```'
+            echo "${IMAGE}:${VERSION}"
+            echo '```'
+          } >> release-notes.md
+          cat release-notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
