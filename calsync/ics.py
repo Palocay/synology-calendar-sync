@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 
 import requests
 from icalendar import Calendar
+from icalendar.prop import vText
 
 from .common import (
     APP_VERSION, TZ, UTC, Desired, Settings, deletion_blocked, env_int, env_str,
@@ -130,6 +131,23 @@ def content_hash(comps) -> str:
     return h.hexdigest()[:32]
 
 
+def strip_text_values(comp) -> None:
+    """Remove leading/trailing whitespace from text properties (e.g. "Training ").
+    Otherwise the caldav library fixes it itself and logs a long warning."""
+    for sub in comp.walk():
+        for name, value in list(sub.items()):
+            values = value if isinstance(value, list) else [value]
+            cleaned = []
+            for v in values:
+                if isinstance(v, vText) and str(v) != str(v).strip():
+                    new = vText(str(v).strip())
+                    new.params = v.params
+                    v = new
+                cleaned.append(v)
+            if any(a is not b for a, b in zip(cleaned, values)):
+                sub[name] = cleaned if isinstance(value, list) else cleaned[0]
+
+
 def group_events(cal: Calendar, log: logging.Logger) -> dict[str, list]:
     """Group VEVENTs by UID: master event plus its modified occurrences."""
     groups: dict[str, list] = {}
@@ -170,6 +188,7 @@ def build_objects(feed: Feed, cal: Calendar, today: date,
         for tz in timezones:
             out.add_component(tz)
         for comp in comps:
+            strip_text_values(comp)
             comp.pop("UID", None)
             comp.add("uid", uid)
             if "DTSTAMP" not in comp:

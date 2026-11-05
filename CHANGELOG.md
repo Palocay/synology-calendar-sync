@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- ICS: remove leading/trailing whitespace from text fields (e.g. titles), avoids "Ical data was modified" warnings
+
 ## 1.0.0
 
 First release.

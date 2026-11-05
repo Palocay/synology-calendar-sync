@@ -117,3 +117,9 @@ def test_load_feeds(monkeypatch):
         ("https://example.com/a.ics", "Waste", "4h", None),
         ("https://example.com/b.ics", "Holidays", "24h", 30),
     ]
+
+
+def test_trailing_whitespace_is_removed():
+    feed_text = FEED.replace("SUMMARY:Waste collection", "SUMMARY:Waste collection ")
+    text = [t for _, t, label in build(feed_text).values() if "Waste collection" in label][0]
+    assert "SUMMARY:Waste collection\r\n" in text
