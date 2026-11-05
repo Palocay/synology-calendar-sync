@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- `latest` now points to the newest release, `main` to the newest commit
+
 ## 1.0.1
 
 - ICS: remove leading/trailing whitespace from text fields (e.g. titles), avoids "Ical data was modified" warnings
