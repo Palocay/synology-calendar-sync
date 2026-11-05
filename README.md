@@ -128,3 +128,7 @@ If a large cleanup is intended, set `MAX_DELETE_PERCENT: "100"` for one run.
 ## Health check
 
 The container turns *healthy* after the first successful run and *unhealthy* if any job has not succeeded for two of its intervals (+10 minutes).
+
+## Support
+
+If this project is useful to you, you can [sponsor it on GitHub](https://github.com/sponsors/Palocay) or [buy me a coffee](https://ko-fi.com/palocay).
