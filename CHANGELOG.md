@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3
+
+- **Breaking:** new UID prefix for birthday events. Delete and recreate the birthday calendar before updating, otherwise existing birthdays appear twice.
+- Removed old variable names `CALENDAR_NAME`, `REMINDER` and `YEARS_AHEAD`; use `BIRTHDAY_CALENDAR`, `BIRTHDAY_REMINDER` and `BIRTHDAY_YEARS_AHEAD`
+
 ## 1.0.2
 
 - `latest` now points to the newest release, `main` to the newest commit

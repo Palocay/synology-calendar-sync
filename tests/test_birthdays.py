@@ -69,10 +69,10 @@ def test_contact_without_birthday():
     assert b.birthday_from_vcard(vobject.readOne(VCARD.replace("BDAY:1991-05-15\n", ""))) is None
 
 
-def test_uid_is_backwards_compatible():
+def test_uid_prefix():
     card = vobject.readOne(VCARD)
     digest = b.contact_digest(card, "Jane Doe")
-    assert b.birthday_from_vcard(card).series_uid == f"synology-birthday-sync:{digest}"
+    assert b.birthday_from_vcard(card).series_uid == f"synology-calendar-sync:birthday:{digest}"
 
 
 def test_birthday_events():
@@ -114,13 +114,11 @@ def test_alarm_trigger():
     assert "TRIGGER:-PT15H" in ical
 
 
-def test_old_variable_names_still_work(monkeypatch):
-    for name in ("BIRTHDAY_CALENDAR", "BIRTHDAY_REMINDER", "BIRTHDAY_YEARS_AHEAD", "BIRTHDAY_INTERVAL"):
-        monkeypatch.delenv(name, raising=False)
+def test_load_config(monkeypatch):
     monkeypatch.setenv("CARDDAV_URL", "https://nas/carddav/")
-    monkeypatch.setenv("CALENDAR_NAME", "Geburtstage")
-    monkeypatch.setenv("REMINDER", "1d 09:00")
-    monkeypatch.setenv("YEARS_AHEAD", "5")
+    monkeypatch.setenv("BIRTHDAY_CALENDAR", "Geburtstage")
+    monkeypatch.setenv("BIRTHDAY_REMINDER", "1d 09:00")
+    monkeypatch.setenv("BIRTHDAY_YEARS_AHEAD", "5")
     cfg = b.load_config()
     assert cfg.calendar == "Geburtstage"
     assert cfg.reminders == (timedelta(hours=-15),)

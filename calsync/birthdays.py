@@ -19,8 +19,7 @@ from .common import (
     env_str, get_calendar, own_events, prop_text, first_vevent, write_changes,
 )
 
-# Kept from the original project name so existing events are recognized.
-PREFIX = "synology-birthday-sync:"
+PREFIX = "synology-calendar-sync:birthday:"
 DAV_NS = "DAV:"
 CARD_NS = "urn:ietf:params:xml:ns:carddav"
 DESCRIPTION = "Synced automatically from Synology Contacts."
@@ -72,9 +71,9 @@ def load_config() -> BirthdayConfig | None:
     return BirthdayConfig(
         carddav_url=carddav_url,
         # Old variable names are still accepted as fallback.
-        calendar=env_str("BIRTHDAY_CALENDAR", "CALENDAR_NAME", default="Birthdays"),
-        years_ahead=env_int("BIRTHDAY_YEARS_AHEAD", env_int("YEARS_AHEAD", 10, 1, 20), 1, 20),
-        reminders=tuple(parse_reminders(env_str("BIRTHDAY_REMINDER", "REMINDER"))),
+        calendar=env_str("BIRTHDAY_CALENDAR", default="Birthdays"),
+        years_ahead=env_int("BIRTHDAY_YEARS_AHEAD", 10, 1, 20),
+        reminders=tuple(parse_reminders(env_str("BIRTHDAY_REMINDER"))),
         interval=env_str("BIRTHDAY_INTERVAL", "SCHEDULE_INTERVAL", default="24h"),
     )
 
