@@ -9,17 +9,24 @@ services:
       CALDAV_URL: ${CALDAV_URL}
       DRY_RUN: "true"                    # test first, then set to "false"
       SCHEDULE_TIME: "04:00"             # first run of the day for all jobs
-      SCHEDULE_INTERVAL: "4h"            # e.g. 4h, 90m, 24h (= once a day)
+      SCHEDULE_INTERVAL: "4h"            # default interval
       DELETE_STALE_EVENTS: "true"
       MAX_DELETE_PERCENT: "50"           # deletion protection
 
       # Birthdays from Synology Contacts (remove CARDDAV_URL to disable)
       CARDDAV_URL: ${CARDDAV_URL}
       BIRTHDAY_CALENDAR: "Birthdays"
-      BIRTHDAY_REMINDER: "1d 09:00"      # e.g. "1d 09:00" = day before at 09:00
+      BIRTHDAY_REMINDER: ""              # e.g. "1d 09:00" = day before at 09:00
+
+      # Public holidays (remove HOLIDAYS_CALENDAR to disable)
+      HOLIDAYS_CALENDAR: "Holidays"
+      HOLIDAYS_COUNTRY: "DE"
+      # HOLIDAYS_STATE: "BY"             # only one state; default: all states
+      # HOLIDAYS_OBSERVANCES: "false"    # without Volkstrauertag, Muttertag, ...
 
       # ICS subscriptions (number them 1, 2, 3, ...)
-      ICS_1_URL: "https://example.com/calendar.ics"
-      ICS_1_CALENDAR: "Waste collection"
-      ICS_1_INTERVAL: "24h"
+      # ICS_1_URL: "https://example.com/calendar.ics"
+      # ICS_1_CALENDAR: "Waste collection"
+      # ICS_1_INTERVAL: "24h"
+      # ICS_1_REMINDER: "1d 18:00"     # day before at 18:00
     restart: unless-stopped

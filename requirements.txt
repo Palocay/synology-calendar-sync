@@ -2,3 +2,4 @@ caldav==3.7.0
 icalendar==6.3.2
 vobject==0.9.9
 requests==2.34.2
+holidays==0.98

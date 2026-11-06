@@ -7,26 +7,21 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 import requests
 import vobject
-from icalendar import Alarm, Calendar, Event
 from requests.auth import HTTPBasicAuth
 
 from .common import (
-    APP_VERSION, TZ, UTC, Desired, Settings, deletion_blocked, env_bool, env_int,
-    env_str, get_calendar, own_events, prop_text, first_vevent, write_changes,
+    APP_VERSION, TZ, Reminder, Settings, env_bool, env_int, env_str, make_allday_ical,
+    parse_reminders, sync_allday,
 )
 
 PREFIX = "synology-calendar-sync:birthday:"
+DESCRIPTION = "Synced automatically from Synology Contacts."
 DAV_NS = "DAV:"
 CARD_NS = "urn:ietf:params:xml:ns:carddav"
-DESCRIPTION = "Synced automatically from Synology Contacts."
-
-# Fields compared to decide whether an event has changed. Timestamps are
-# deliberately excluded, otherwise every event would change on every run.
-COMPARE_FIELDS = ("SUMMARY", "DTSTART", "DTEND", "TRANSP", "CATEGORIES", "DESCRIPTION")
 
 log = logging.getLogger("birthdays")
 
@@ -39,28 +34,8 @@ class BirthdayConfig:
     carddav_url: str
     calendar: str
     years_ahead: int
-    reminders: tuple[timedelta, ...]
+    reminders: tuple[Reminder, ...]
     interval: str
-
-
-def parse_reminders(raw: str) -> list[timedelta]:
-    """'1d 09:00' -> day before at 09:00, '0d 08:00' or '08:00' -> same day,
-    '2d' -> two days before at 00:00. Several values separated by commas.
-    Returned as offsets relative to the start of the all-day event."""
-    result = []
-    for part in (raw or "").split(","):
-        part = part.strip().lower()
-        if not part:
-            continue
-        m = re.fullmatch(r"(?:(\d{1,2})\s*d)?\s*(?:(\d{1,2}):(\d{2}))?", part)
-        if not m or not any(m.groups()):
-            raise RuntimeError(f"Invalid BIRTHDAY_REMINDER value: {part!r} (e.g. '1d 09:00', '08:00')")
-        days = int(m.group(1) or 0)
-        hours, minutes = int(m.group(2) or 0), int(m.group(3) or 0)
-        if hours > 23 or minutes > 59:
-            raise RuntimeError(f"Invalid time in BIRTHDAY_REMINDER: {part!r}")
-        result.append(timedelta(days=-days, hours=hours, minutes=minutes))
-    return sorted(set(result))
 
 
 def load_config() -> BirthdayConfig | None:
@@ -70,10 +45,9 @@ def load_config() -> BirthdayConfig | None:
         return None
     return BirthdayConfig(
         carddav_url=carddav_url,
-        # Old variable names are still accepted as fallback.
         calendar=env_str("BIRTHDAY_CALENDAR", default="Birthdays"),
         years_ahead=env_int("BIRTHDAY_YEARS_AHEAD", 10, 1, 20),
-        reminders=tuple(parse_reminders(env_str("BIRTHDAY_REMINDER"))),
+        reminders=parse_reminders(env_str("BIRTHDAY_REMINDER"), "BIRTHDAY_REMINDER"),
         interval=env_str("BIRTHDAY_INTERVAL", "SCHEDULE_INTERVAL", default="24h"),
     )
 
@@ -187,7 +161,7 @@ class BirthdayEvent:
     uid: str
     summary: str
     start: date
-    reminders: tuple[timedelta, ...]
+    reminders: tuple[Reminder, ...]
 
 
 def date_for_year(month: int, day: int, year: int) -> date:
@@ -230,50 +204,8 @@ def birthday_events(bday: Birthday, years: range, reminders=()) -> list[Birthday
 
 
 def make_ical(ev: BirthdayEvent, created: datetime | None = None) -> str:
-    now = datetime.now(tz=UTC).replace(microsecond=0)
-    event = Event()
-    event.add("uid", ev.uid)
-    event.add("dtstamp", now)          # mandatory per RFC 5545
-    event.add("summary", ev.summary)
-    event.add("dtstart", ev.start)
-    event.add("dtend", ev.start + timedelta(days=1))
-    event.add("transp", "TRANSPARENT")
-    event.add("categories", ["Birthday"])
-    event.add("description", DESCRIPTION)
-    event.add("created", created or now)
-    event.add("last-modified", now)
-    for offset in ev.reminders:
-        alarm = Alarm()
-        alarm.add("action", "DISPLAY")
-        alarm.add("description", ev.summary)
-        alarm.add("trigger", offset)
-        event.add_component(alarm)
-
-    cal = Calendar()
-    cal.add("prodid", "-//synology-calendar-sync//EN")
-    cal.add("version", "2.0")
-    cal.add_component(event)
-    return cal.to_ical().decode("utf-8")
-
-
-def _alarm_triggers(vevent) -> tuple:
-    triggers = []
-    for alarm in vevent.walk("VALARM"):
-        trigger = alarm.get("TRIGGER")
-        dt = getattr(trigger, "dt", None)
-        if isinstance(dt, timedelta):
-            triggers.append(int(dt.total_seconds()))
-        elif trigger is not None:
-            triggers.append(prop_text(trigger))
-    return tuple(sorted(triggers, key=str))
-
-
-def fingerprint(vevent) -> tuple:
-    """Content-based comparison key, independent of timestamps, line folding,
-    property order or fields added by the server."""
-    if vevent is None:
-        return ()
-    return tuple(prop_text(vevent.get(f)) for f in COMPARE_FIELDS) + (_alarm_triggers(vevent),)
+    return make_allday_ical(ev.uid, ev.summary, ev.start, "Birthday", DESCRIPTION,
+                            ev.reminders, created)
 
 
 # --------------------------------------------------------------------------- #
@@ -287,7 +219,7 @@ def run(cfg: BirthdayConfig, settings: Settings) -> None:
     today = datetime.now(TZ).date()
     years = range(today.year, today.year + cfg.years_ahead)
 
-    desired: dict[str, Desired] = {}
+    events = []
     seen: set[str] = set()
     for vcard in vcards:
         bday = birthday_from_vcard(vcard)
@@ -298,34 +230,14 @@ def run(cfg: BirthdayConfig, settings: Settings) -> None:
             continue
         seen.add(bday.series_uid)
         for ev in birthday_events(bday, years, cfg.reminders):
-            desired[ev.uid] = Desired(
-                key=fingerprint(first_vevent(make_ical(ev))),
-                render=lambda created, ev=ev: make_ical(ev, created),
-                label=f"{ev.summary} ({ev.start})",
-            )
+            events.append((ev.uid, ev.summary, ev.start, "Birthday", DESCRIPTION, ev.reminders))
 
-    client, calendar = get_calendar(settings, cfg.calendar)
-    try:
-        found = own_events(calendar, PREFIX,
-                           start=date(today.year, 1, 1),
-                           end=date(today.year + cfg.years_ahead + 1, 1, 1))
-        existing = {}
-        for uid, (item, vevent) in found.items():
-            created = vevent.get("created")
-            existing[uid] = (item, fingerprint(vevent), created.dt if created is not None else None)
-
-        def series(uid: str) -> str:
-            return uid.rsplit(":", 1)[0]
-
-        counts = write_changes(
-            log, calendar, settings, desired, existing,
-            block_reason=lambda stale: deletion_blocked(
-                {series(u) for u in stale}, {series(u) for u in existing}, len(seen),
-                settings.max_delete_percent, always_allowed=2, unit="contacts"),
-        )
-    finally:
-        client.close()
-
+    counts = sync_allday(
+        log, settings, cfg.calendar, PREFIX, events,
+        window_start=date(today.year, 1, 1),
+        window_end=date(today.year + cfg.years_ahead + 1, 1, 1),
+        source_count=len(seen), always_allowed=2, unit="contacts",
+    )
     log.info("Done: %d birthdays, %d events - %s (%.1fs)%s",
-             len(seen), len(desired), counts.summary(), time.monotonic() - started,
+             len(seen), len(events), counts.summary(), time.monotonic() - started,
              " [DRY RUN - nothing written]" if settings.dry_run else "")

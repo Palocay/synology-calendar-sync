@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from . import birthdays, ics
+from . import birthdays, ics, public_holidays
 from .common import (
     APP_VERSION, TZ, daily_slots, env_bool, env_str, format_slots, load_settings,
     next_run, parse_hhmm, parse_interval, setup_logging, sleep_until,
@@ -31,7 +31,7 @@ class Job:
 
 def build_jobs() -> list[Job]:
     settings = load_settings()
-    start_min = parse_hhmm(env_str("SCHEDULE_TIME", default="04:00"))
+    start_min = parse_hhmm(env_str("SCHEDULE_TIME", default="04:30"))
     default_interval = env_str("SCHEDULE_INTERVAL", default="24h")
     jobs = []
 
@@ -41,13 +41,20 @@ def build_jobs() -> list[Job]:
         jobs.append(Job("birthdays", minutes, daily_slots(start_min, minutes),
                         lambda: birthdays.run(bcfg, settings)))
 
+    hcfg = public_holidays.load_config()
+    if hcfg:
+        minutes = parse_interval(hcfg.interval, "HOLIDAYS_INTERVAL")
+        jobs.append(Job("holidays", minutes, daily_slots(start_min, minutes),
+                        lambda: public_holidays.run(hcfg, settings)))
+
     for feed in ics.load_feeds(default_interval):
         minutes = parse_interval(feed.interval, f"ICS_{feed.number}_INTERVAL")
         jobs.append(Job(f"ics:{feed.name}", minutes, daily_slots(start_min, minutes),
                         lambda feed=feed: ics.run(feed, settings)))
 
     if not jobs:
-        raise RuntimeError("Nothing to do: set CARDDAV_URL (birthdays) and/or ICS_1_URL (subscriptions).")
+        raise RuntimeError("Nothing to do: set CARDDAV_URL (birthdays), HOLIDAYS_CALENDAR "
+                           "and/or ICS_1_URL (subscriptions).")
     if settings.dry_run:
         log.warning("DRY_RUN is active - nothing will be written. Set DRY_RUN=false when ready.")
     return jobs

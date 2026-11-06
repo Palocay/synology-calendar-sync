@@ -14,7 +14,7 @@ from typing import Callable
 from zoneinfo import ZoneInfo
 
 from caldav import get_davclient
-from icalendar import Calendar
+from icalendar import Alarm, Calendar, Event
 
 APP_NAME = "synology-calendar-sync"
 APP_VERSION = os.getenv("APP_VERSION", "dev")
@@ -345,3 +345,148 @@ def write_changes(log: logging.Logger, calendar, settings: Settings,
                 continue
         counts.deleted += 1
     return counts
+
+
+# --------------------------------------------------------------------------- #
+# Reminders
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class Reminder:
+    """Either a clock time relative to the event's day ('1d 09:00' = day before
+    at 09:00) or a duration before the start ('30m', '2h', '1d')."""
+    days: int = 0
+    clock_min: int | None = None      # minutes after midnight, or None
+    before: timedelta | None = None   # duration before start, or None
+
+    def offset(self, start) -> timedelta:
+        """Alarm offset relative to the event start (date or datetime)."""
+        if self.before is not None:
+            return -self.before
+        start_of_day = 0
+        if isinstance(start, datetime):
+            start_of_day = start.hour * 60 + start.minute
+        return timedelta(days=-self.days, minutes=self.clock_min - start_of_day)
+
+
+def parse_reminders(raw: str, setting: str = "REMINDER") -> tuple[Reminder, ...]:
+    """Comma separated list.
+    With a time:    '1d 09:00' (day before at 09:00), '08:00' (on the day at 08:00)
+    Without a time: '30m', '2h', '1d', '1d12h' (that long before the start)"""
+    result = []
+    for part in (raw or "").split(","):
+        part = part.strip().lower()
+        if not part:
+            continue
+        m = re.fullmatch(r"(?:(\d{1,2})\s*d)?\s*(\d{1,2}):(\d{2})", part)
+        if m:
+            hours, minutes = int(m.group(2)), int(m.group(3))
+            if hours > 23 or minutes > 59:
+                raise RuntimeError(f"Invalid time in {setting}: {part!r}")
+            result.append(Reminder(days=int(m.group(1) or 0), clock_min=hours * 60 + minutes))
+            continue
+        m = re.fullmatch(r"(?:(\d+)\s*d)?\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m(?:in)?)?", part)
+        if m and any(m.groups()):
+            result.append(Reminder(before=timedelta(days=int(m.group(1) or 0),
+                                                    hours=int(m.group(2) or 0),
+                                                    minutes=int(m.group(3) or 0))))
+            continue
+        raise RuntimeError(f"Invalid {setting} value: {part!r} (e.g. '1d 09:00', '08:00', '30m')")
+    return tuple(dict.fromkeys(result))
+
+
+def make_alarm(offset: timedelta, summary: str):
+    alarm = Alarm()
+    alarm.add("action", "DISPLAY")
+    alarm.add("description", summary)
+    alarm.add("trigger", offset)
+    return alarm
+
+
+# --------------------------------------------------------------------------- #
+# All-day events (birthdays, holidays)
+# --------------------------------------------------------------------------- #
+# Fields compared to decide whether an event has changed. Timestamps are
+# deliberately excluded, otherwise every event would change on every run.
+COMPARE_FIELDS = ("SUMMARY", "DTSTART", "DTEND", "TRANSP", "CATEGORIES", "DESCRIPTION")
+
+
+def make_allday_ical(uid: str, summary: str, start, category: str, description: str,
+                     reminders=(), created: datetime | None = None) -> str:
+    now = datetime.now(tz=UTC).replace(microsecond=0)
+    event = Event()
+    event.add("uid", uid)
+    event.add("dtstamp", now)          # mandatory per RFC 5545
+    event.add("summary", summary)
+    event.add("dtstart", start)
+    event.add("dtend", start + timedelta(days=1))
+    event.add("transp", "TRANSPARENT")
+    event.add("categories", [category])
+    if description:
+        event.add("description", description)
+    event.add("created", created or now)
+    event.add("last-modified", now)
+    for reminder in reminders:
+        event.add_component(make_alarm(reminder.offset(start), summary))
+
+    cal = Calendar()
+    cal.add("prodid", "-//synology-calendar-sync//EN")
+    cal.add("version", "2.0")
+    cal.add_component(event)
+    return cal.to_ical().decode("utf-8")
+
+
+def _alarm_triggers(vevent) -> tuple:
+    triggers = []
+    for alarm in vevent.walk("VALARM"):
+        trigger = alarm.get("TRIGGER")
+        dt = getattr(trigger, "dt", None)
+        if isinstance(dt, timedelta):
+            triggers.append(int(dt.total_seconds()))
+        elif trigger is not None:
+            triggers.append(prop_text(trigger))
+    return tuple(sorted(triggers, key=str))
+
+
+def fingerprint(vevent) -> tuple:
+    """Content-based comparison key, independent of timestamps, line folding,
+    property order or fields added by the server."""
+    if vevent is None:
+        return ()
+    return tuple(prop_text(vevent.get(f)) for f in COMPARE_FIELDS) + (_alarm_triggers(vevent),)
+
+
+def sync_allday(log: logging.Logger, settings: Settings, calendar_name: str, prefix: str,
+                events: list[tuple[str, str, object, str, str, tuple]],
+                window_start, window_end, source_count: int,
+                always_allowed: int, unit: str) -> Counts:
+    """Write all-day events (uid, summary, start, category, description, reminders)
+    into a calendar. Own events before window_start are never touched."""
+    desired: dict[str, Desired] = {}
+    for uid, summary, start, category, description, reminders in events:
+        args = (uid, summary, start, category, description, reminders)
+        desired[uid] = Desired(
+            key=fingerprint(first_vevent(make_allday_ical(*args))),
+            render=lambda created, args=args: make_allday_ical(*args, created=created),
+            label=f"{summary} ({start})",
+        )
+
+    client, calendar = get_calendar(settings, calendar_name)
+    try:
+        existing = {}
+        for uid, (item, vevent) in own_events(calendar, prefix, start=window_start, end=window_end).items():
+            created = vevent.get("created")
+            existing[uid] = (item, fingerprint(vevent), created.dt if created is not None else None)
+        return write_changes(
+            log, calendar, settings, desired, existing,
+            block_reason=lambda stale: deletion_blocked(
+                {series_of(u) for u in stale} if unit == "contacts" else set(stale),
+                {series_of(u) for u in existing} if unit == "contacts" else set(existing),
+                source_count, settings.max_delete_percent, always_allowed, unit),
+        )
+    finally:
+        client.close()
+
+
+def series_of(uid: str) -> str:
+    """UID without the trailing ':<year>'."""
+    return uid.rsplit(":", 1)[0]

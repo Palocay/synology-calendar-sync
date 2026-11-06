@@ -3,7 +3,7 @@ from datetime import date
 
 from icalendar import Calendar
 
-from calsync import ics
+from calsync import common, ics
 
 LOG = logging.getLogger("test")
 
@@ -55,7 +55,7 @@ END:VCALENDAR
 
 def feed(**overrides):
     values = dict(number=1, name="Test", url="https://example.com/cal.ics", calendar="Test",
-                  interval="1h", past_days=None, username="", password="")
+                  interval="1h", past_days=None, username="", password="", reminders=())
     values.update(overrides)
     return ics.Feed(**values)
 
@@ -123,3 +123,26 @@ def test_trailing_whitespace_is_removed():
     feed_text = FEED.replace("SUMMARY:Waste collection", "SUMMARY:Waste collection ")
     text = [t for _, t, label in build(feed_text).values() if "Waste collection" in label][0]
     assert "SUMMARY:Waste collection\r\n" in text
+
+
+def test_reminders_replace_feed_alarms():
+    feed_text = FEED.replace("SUMMARY:Waste collection\n",
+                             "SUMMARY:Waste collection\nBEGIN:VALARM\nACTION:DISPLAY\n"
+                             "TRIGGER:-PT5M\nEND:VALARM\n")
+    objects = build(feed_text, reminders=common.parse_reminders("1d 18:00"))
+    waste = [t for _, t, label in objects.values() if "Waste collection" in label][0]
+    assert "TRIGGER:-PT5M" not in waste
+    assert "TRIGGER:-PT6H" in waste            # all-day: day before at 18:00
+
+
+def test_reminder_for_timed_event():
+    objects = build(reminders=common.parse_reminders("30m"))
+    weekly = [t for _, t, label in objects.values() if "Weekly meeting" in label][0]
+    assert weekly.count("TRIGGER:-PT30M") == 2   # master and moved occurrence
+
+
+def test_reminder_change_updates_hash():
+    without = {u: h for u, (h, _, _) in build().items()}
+    with_reminder = {u: h for u, (h, _, _) in build(reminders=common.parse_reminders("30m")).items()}
+    assert without.keys() == with_reminder.keys()
+    assert all(without[u] != with_reminder[u] for u in without)

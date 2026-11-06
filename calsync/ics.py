@@ -19,8 +19,8 @@ from icalendar import Calendar
 from icalendar.prop import vText
 
 from .common import (
-    APP_VERSION, TZ, UTC, Desired, Settings, deletion_blocked, env_int, env_str,
-    get_calendar, own_events, prop_text, write_changes,
+    APP_VERSION, TZ, UTC, Desired, Reminder, Settings, deletion_blocked, env_int, env_str,
+    get_calendar, make_alarm, own_events, parse_reminders, prop_text, write_changes,
 )
 
 PREFIX = "synology-calendar-sync:ics:"
@@ -40,6 +40,7 @@ class Feed:
     past_days: int | None
     username: str
     password: str
+    reminders: tuple[Reminder, ...] = ()
 
     @property
     def key(self) -> str:
@@ -74,6 +75,7 @@ def load_feeds(default_interval: str) -> list[Feed]:
             past_days=env_int(p + "PAST_DAYS", 0, 0, 36500) if past else None,
             username=env_str(p + "USERNAME"),
             password=env_str(p + "PASSWORD"),
+            reminders=parse_reminders(env_str(p + "REMINDER"), p + "REMINDER"),
         ))
     return feeds
 
@@ -148,6 +150,17 @@ def strip_text_values(comp) -> None:
                 sub[name] = cleaned if isinstance(value, list) else cleaned[0]
 
 
+def set_reminders(comp, reminders) -> None:
+    """Replace the feed's own alarms with the configured reminders."""
+    start = getattr(comp.get("DTSTART"), "dt", None)
+    if start is None:
+        return
+    comp.subcomponents = [c for c in comp.subcomponents if c.name != "VALARM"]
+    summary = prop_text(comp.get("SUMMARY")) or "Reminder"
+    for reminder in reminders:
+        comp.add_component(make_alarm(reminder.offset(start), summary))
+
+
 def group_events(cal: Calendar, log: logging.Logger) -> dict[str, list]:
     """Group VEVENTs by UID: master event plus its modified occurrences."""
     groups: dict[str, list] = {}
@@ -180,6 +193,9 @@ def build_objects(feed: Feed, cal: Calendar, today: date,
                 continue
 
         digest = content_hash(comps)
+        if feed.reminders:
+            # Changing the reminder setting must update the events.
+            digest = hashlib.sha256(f"{digest}{feed.reminders!r}".encode()).hexdigest()[:32]
         uid = feed.prefix + hashlib.sha256(source_uid.encode("utf-8")).hexdigest()[:24]
 
         out = Calendar()
@@ -195,6 +211,8 @@ def build_objects(feed: Feed, cal: Calendar, today: date,
                 comp.add("dtstamp", now)
             comp.pop(HASH_PROP, None)
             comp.add(HASH_PROP, digest)
+            if feed.reminders:
+                set_reminders(comp, feed.reminders)
             out.add_component(comp)
 
         label = f"{prop_text(comps[0].get('SUMMARY')) or '(no title)'} ({_as_date(comps[0].get('DTSTART'))})"

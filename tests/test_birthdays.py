@@ -4,6 +4,7 @@ import pytest
 import vobject
 
 from calsync import birthdays as b
+from calsync import common
 
 VCARD = """BEGIN:VCARD
 VERSION:3.0
@@ -35,24 +36,6 @@ def test_parse_vcard_date(raw, expected):
 def test_leap_day_in_non_leap_year():
     assert b.date_for_year(2, 29, 2027) == date(2027, 2, 28)
     assert b.date_for_year(2, 29, 2028) == date(2028, 2, 29)
-
-
-@pytest.mark.parametrize("raw, expected", [
-    ("", []),
-    ("1d 09:00", [timedelta(hours=-15)]),
-    ("08:00", [timedelta(hours=8)]),
-    ("0d 08:00", [timedelta(hours=8)]),
-    ("2d", [timedelta(days=-2)]),
-    ("1d 09:00, 08:00", [timedelta(hours=-15), timedelta(hours=8)]),
-])
-def test_parse_reminders(raw, expected):
-    assert b.parse_reminders(raw) == expected
-
-
-@pytest.mark.parametrize("raw", ["tomorrow", "1d 25:00", "09:99"])
-def test_parse_reminders_invalid(raw):
-    with pytest.raises(RuntimeError):
-        b.parse_reminders(raw)
 
 
 def test_make_title():
@@ -97,19 +80,19 @@ def test_ical_has_dtstamp():
 
 
 def test_fingerprint_ignores_timestamps():
-    first = b.fingerprint(b.first_vevent(b.make_ical(_event())))
-    second = b.fingerprint(b.first_vevent(b.make_ical(_event(), created=datetime(2020, 1, 1))))
+    first = common.fingerprint(common.first_vevent(b.make_ical(_event())))
+    second = common.fingerprint(common.first_vevent(b.make_ical(_event(), created=datetime(2020, 1, 1))))
     assert first == second
 
 
 def test_fingerprint_detects_reminder_change():
-    without = b.fingerprint(b.first_vevent(b.make_ical(_event())))
-    with_alarm = b.fingerprint(b.first_vevent(b.make_ical(_event([timedelta(hours=-15)]))))
+    without = common.fingerprint(common.first_vevent(b.make_ical(_event())))
+    with_alarm = common.fingerprint(common.first_vevent(b.make_ical(_event(common.parse_reminders("1d 09:00")))))
     assert without != with_alarm
 
 
 def test_alarm_trigger():
-    ical = b.make_ical(_event([timedelta(hours=-15)]))
+    ical = b.make_ical(_event(common.parse_reminders("1d 09:00")))
     assert "BEGIN:VALARM" in ical
     assert "TRIGGER:-PT15H" in ical
 
@@ -121,7 +104,7 @@ def test_load_config(monkeypatch):
     monkeypatch.setenv("BIRTHDAY_YEARS_AHEAD", "5")
     cfg = b.load_config()
     assert cfg.calendar == "Geburtstage"
-    assert cfg.reminders == (timedelta(hours=-15),)
+    assert [r.offset(date(2026, 5, 15)) for r in cfg.reminders] == [timedelta(hours=-15)]
     assert cfg.years_ahead == 5
 
 

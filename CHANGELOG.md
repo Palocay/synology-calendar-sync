@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- New: public holidays without ICS feed (`HOLIDAYS_CALENDAR`, `HOLIDAYS_COUNTRY`, `HOLIDAYS_STATE`), including German observances like Volkstrauertag or Muttertag (`HOLIDAYS_OBSERVANCES`)
+- New: reminders for ICS subscriptions (`ICS_n_REMINDER`), replacing the feed's own reminders
+- Reminders also accept durations before the start, e.g. `30m` or `2h`
+
 ## 1.0.3
 
 - **Breaking:** new UID prefix for birthday events. Delete and recreate the birthday calendar before updating, otherwise existing birthdays appear twice.
