@@ -9,6 +9,7 @@
 [![Release](https://img.shields.io/github/v/release/Palocay/synology-calendar-sync?logo=github)](https://github.com/Palocay/synology-calendar-sync/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/Palocay/synology-calendar-sync/docker-publish.yml?branch=main&label=build&logo=githubactions&logoColor=white)](https://github.com/Palocay/synology-calendar-sync/actions)
 [![Docker image](https://img.shields.io/badge/ghcr.io-synology--calendar--sync-2496ED?logo=docker&logoColor=white)](https://github.com/Palocay/synology-calendar-sync/pkgs/container/synology-calendar-sync)
+[![Docker Hub](https://img.shields.io/docker/pulls/palocay/synology-calendar-sync?logo=docker&logoColor=white&label=Docker%20Hub)](https://hub.docker.com/r/palocay/synology-calendar-sync)
 [![Platforms](https://img.shields.io/badge/platform-amd64%20%7C%20arm64-lightgrey)](#-installation)
 [![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](requirements.txt)
 [![License](https://img.shields.io/github/license/Palocay/synology-calendar-sync)](LICENSE)

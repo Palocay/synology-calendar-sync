@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- Docker image is now also published on Docker Hub
+
 ## 1.1.1
 
 - New logo and redesigned README with badges, quick start and feature overview
