@@ -1,3 +1,4 @@
+<!--suppress HtmlDeprecatedAttribute -->
 <div align="center">
 
 <img src="https://raw.githubusercontent.com/Palocay/synology-calendar-sync/main/assets/logo.png" alt="synology-calendar-sync logo" width="128">
