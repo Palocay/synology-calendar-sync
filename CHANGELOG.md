@@ -1,6 +1,6 @@
 # Changelog
 
-# 1.1.3
+## 1.1.3
 
 - Fix logo on Docker Hub
 

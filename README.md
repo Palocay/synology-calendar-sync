@@ -36,7 +36,7 @@
 ```yaml
 services:
   synology-calendar-sync:
-    image: ghcr.io/palocay/synology-calendar-sync:latest
+    image: palocay/synology-calendar-sync:latest
     container_name: synology-calendar-sync
     environment:
       TZ: Europe/Berlin
