@@ -1,5 +1,9 @@
 # Changelog
 
+# 1.1.3
+
+- Fix logo on Docker Hub
+
 ## 1.1.2
 
 - Docker image is now also published on Docker Hub

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.svg" alt="synology-calendar-sync logo" width="128">
+<img src="https://raw.githubusercontent.com/Palocay/synology-calendar-sync/main/assets/logo.png" alt="synology-calendar-sync logo" width="128">
 
 # synology-calendar-sync
 
