@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- New logo and redesigned README with badges, quick start and feature overview
+- Docker image: icon label (`net.unraid.docker.icon`) for container managers that support it
+- Docker image: updated description
+
 ## 1.1.0
 
 - New: public holidays without ICS feed (`HOLIDAYS_CALENDAR`, `HOLIDAYS_COUNTRY`, `HOLIDAYS_STATE`), including German observances like Volkstrauertag or Muttertag (`HOLIDAYS_OBSERVANCES`)

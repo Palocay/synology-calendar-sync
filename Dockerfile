@@ -3,8 +3,9 @@ FROM python:3.12-slim
 ARG VERSION=dev
 
 LABEL org.opencontainers.image.title="synology-calendar-sync" \
-      org.opencontainers.image.description="Birthdays from Synology Contacts and ICS subscriptions for Synology Calendar" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.description="Birthdays, public holidays and ICS subscriptions for Synology Calendar" \
+      org.opencontainers.image.licenses="MIT" \
+      net.unraid.docker.icon="https://raw.githubusercontent.com/Palocay/synology-calendar-sync/main/assets/logo.png"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
