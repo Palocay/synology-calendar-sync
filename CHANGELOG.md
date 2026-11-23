@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.4
+
+- Updated dependencies (icalendar 7.3.0, holidays, pytest)
+
 ## 1.1.3
 
 - Fix logo on Docker Hub
